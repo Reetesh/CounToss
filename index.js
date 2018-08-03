@@ -119,6 +119,7 @@ const TossCoinIntentHandler = {
 
 		handlerInput.attributesManager.setSessionAttributes( user_data );
 		await handlerInput.attributesManager.setPersistentAttributes(user_data);
+		await handlerInput.attributesManager.savePersistentAttributes();
 		
 		return handlerInput.responseBuilder
 			.speak(speechText)
@@ -126,6 +127,31 @@ const TossCoinIntentHandler = {
 			.getResponse();
 	}
 };
+
+const CountResultsIntentHandler = {
+	canHandle( handlerInput ){
+		return handlerInput.requestEnvelope.request.type === "IntentRequest"
+			&& handlerInput.requestEnvelope.request.intent.name === "CountResults";
+	},
+	async handle( handlerInput ) {
+		let speechText = "1..2..3, having trouble counting, sorry";
+		let user_data = await loadUserData( handlerInput);
+		let requested_stat = handlerInput.requestEnvelope.request.intent.slots.result.value;
+		console.log( "Requested Stat", requested_stat);
+		console.log("Request Result", handlerInput.requestEnvelope.request.intent.slots.result);
+		if( requested_stat != undefined && requested_stat.toLowerCase() === "tails" ){
+			speechText = "You have had " + user_data.results_count.tails +" tails so far!";
+		}
+		else {
+			speechText = "You have had " + user_data.results_count.heads + " heads so far!";
+		}
+		return handlerInput.responseBuilder
+			.speak(speechText)
+			.withSimpleCard("Your Stats", speechText)
+			.getResponse();
+	}
+
+}
 
 
 const HelpIntentHandler = {
@@ -155,7 +181,7 @@ const CancelAndStopIntentHandler = {
 		const speechText = "Aww, let's flip some more coins. Sad Face"
 		//adding session data in to persistent Data at the end of the session.
 		let user_data = handlerInput.attributesManager.getSessionAttributes()
-		await handlerInput.attributesManager.setPersistentAttributes( user_data)
+		await handlerInput.attributesManager.savePersistentAttributes( user_data)
 		return handlerInput.responseBuilder
 			.speak( speechText )
 			.withSimpleCard("Fun Time is over?", speechText)
@@ -199,6 +225,7 @@ exports.handler = Alexa.SkillBuilders.standard()
 	.addRequestHandlers(
 		LogIntentTypeHandler,
 		LaunchRequestHandler,
+		CountResultsIntentHandler,
 		TossCoinIntentHandler,
 		HelpIntentHandler,
 		CancelAndStopIntentHandler,

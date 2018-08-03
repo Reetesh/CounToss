@@ -1,11 +1,10 @@
 'use strict';
 
 const Alexa = require('ask-sdk');
-
+const DynamoDBAdapter = require('ask-sdk-dynamodb-persistence-adapter');
 
 const TOSS_RESULT_HEADS = "It\'s Heads!";
 const TOSS_RESULT_TAILS = "It\'s Tails!";
-
 
 
 const LaunchRequestHandler = {
@@ -32,21 +31,39 @@ const TossCoinIntentHandler = {
 			&& handlerInput.requestEnvelope.request.intent.name === "TossCoin";
 	},
 	handle( handlerInput){
-		let speechText = ""
+		let speechText = "Oops Something Bad Happened"
 		//Basically rolling a dice and if it is Even, calling the Toss a Heads, else calling it Tails.
 		let dice_roll = Math.floor((Math.random() * 100 + 1));
+		let new_results = {heads : 0, tails : 0};
+		let results_count = {};
 
-		if( dice_roll % 2 == 0 ){
-			speechText = TOSS_RESULT_HEADS;
-		}
-		else {
-			speechText = TOSS_RESULT_TAILS;
-		}
+		handlerInput.attributesManager.getPersistentAttributes()
+			.then((attributes) => {
+				results_count = attributes['result_count'] != undefined ? attributes['result_count'] : new_results;
+				if( dice_roll % 2 == 0 ){
+					results_count.heads += 1;
+					speechText = TOSS_RESULT_HEADS;
+				}
+				else {
+					results_count.tails += 1;
+					speechText = TOSS_RESULT_TAILS;
+				}
 
-		return handlerInput.responseBuilder
-			.speak(speechText)
-			.withSimpleCard("The Results are in!", speechText)
-			.getResponse();
+				handlerInput.attributesManager.setPersistentAttributes( results_count );
+				return handlerInput.responseBuilder
+					.speak(speechText)
+					.withSimpleCard("The Results are in!", speechText)
+					.getResponse();
+
+			})
+			.catch( (e) => {
+				console.error(e);
+				return handlerInput.responseBuilder
+					.speak(speechText)
+					.withSimpleCard("The Results are in!", speechText)
+					.getResponse();
+			});
+
 	}
 };
 
@@ -117,10 +134,13 @@ const ErrorHandler = {
  *
  */
 
-exports.handler = Alexa.SkillBuilders.custom()
+exports.handler = Alexa.SkillBuilders.standard()
 	.addRequestHandlers(LaunchRequestHandler,
 		TossCoinIntentHandler,
 		HelpIntentHandler,
 		CancelAndStopIntentHandler,
 		SessionEndedRequestHandler)
+	.addErrorHandlers(ErrorHandler)
+	.withTableName('count-coin-toss')
+	.withAutoCreateTable(true)
 	.lambda();

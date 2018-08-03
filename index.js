@@ -1,26 +1,82 @@
 'use strict';
 
 const Alexa = require('ask-sdk');
-const DynamoDBAdapter = require('ask-sdk-dynamodb-persistence-adapter');
 
 const TOSS_RESULT_HEADS = "It\'s Heads!";
 const TOSS_RESULT_TAILS = "It\'s Tails!";
 
+
+
+function loadUserData(handlerInput) {
+	return new Promise( (resolve, reject) => {
+		let new_user_data = { results_count : { heads: 0, tails : 0 } };
+		let user_data =	handlerInput.attributesManager.getSessionAttributes();
+		if( user_data.results_count != undefined ){
+			resolve(user_data);
+		}
+		else {
+
+			handlerInput.attributesManager.getPersistentAttributes()
+			.then((attributes) => {
+				console.log("Persistent Attributes ",  attributes );
+				user_data = attributes.results_count != undefined ? attributes : new_user_data;
+				handlerInput.attributesManager.setSessionAttributes( user_data );
+				console.log("Set Session Attributes", user_data);
+				resolve( user_data);
+			})
+			.catch( (e) => {
+				console.error(e);
+				handlerInput.attributesManager.setSessionAttributes( new_user_data );
+				reject( e );
+			})
+		}
+	})
+}
+
+const LogIntentTypeHandler = {
+	canHandle(handlerInput){
+		console.log("Logging the Request");
+		console.log(JSON.stringify( handlerInput.requestEnvelope.request ) );
+		console.log("Logging session attributes");
+		console.log(JSON.stringify(handlerInput.attributesManager.getSessionAttributes()));
+		return false;
+	},
+	handle( handlerInput){
+		return handlerInput.responseBuilder.getResponse();
+	}
+
+}
+
+const NewSessionHandler = {
+	canHandle(handlerInput){
+		return  handlerInput.requestEnvelope.session.new; 
+	},
+	handle( handlerInput ){
+
+		console.log("Started a New Session");
+		loadUserData(handlerInput);
+		return handlerInput.responseBuilder.getResponse();
+		
+	}
+}
 
 const LaunchRequestHandler = {
 	canHandle(handlerInput) {
 		return handlerInput.requestEnvelope.request.type === 'LaunchRequest';
 	},
 	handle( handlerInput) {
+
+		console.log("New Launch Request received");
 		const welcomeText = "Wanna Toss some COINS?! Just ask!";
 		const repromptText = "You can ask me to flip a coin, try it out!";
 
-
+		loadUserData(handlerInput);
 		return handlerInput.responseBuilder
 			.speak(welcomeText)
 			.reprompt(repromptText)
-			.withSimpleCard("Heads or Tails?", welcomeText)
+			.withSimpleCard("Heads or Tails", welcomeText)
 			.getResponse();
+
 	}
 };
 
@@ -30,40 +86,44 @@ const TossCoinIntentHandler = {
 		return handlerInput.requestEnvelope.request.type === "IntentRequest"
 			&& handlerInput.requestEnvelope.request.intent.name === "TossCoin";
 	},
-	handle( handlerInput){
-		let speechText = "Oops Something Bad Happened"
+	async handle( handlerInput){
+		let speechText = "Oops, Looks like the coin landed in the water."
 		//Basically rolling a dice and if it is Even, calling the Toss a Heads, else calling it Tails.
 		let dice_roll = Math.floor((Math.random() * 100 + 1));
-		let new_results = {heads : 0, tails : 0};
-		let results_count = {};
-
-		handlerInput.attributesManager.getPersistentAttributes()
-			.then((attributes) => {
-				results_count = attributes['result_count'] != undefined ? attributes['result_count'] : new_results;
-				if( dice_roll % 2 == 0 ){
-					results_count.heads += 1;
-					speechText = TOSS_RESULT_HEADS;
+		let user_data = await loadUserData( handlerInput );
+		if( dice_roll % 2 == 0 ){
+			user_data = {
+				...user_data,
+				results_count : {
+					...user_data.results_count,
+					heads : user_data.results_count.heads + 1
 				}
-				else {
-					results_count.tails += 1;
-					speechText = TOSS_RESULT_TAILS;
+			}
+			speechText = TOSS_RESULT_HEADS;
+			console.log("User Data Head", user_data);
+		}
+		else {
+
+			user_data = {
+				...user_data,
+				results_count : {
+					...user_data.results_count,
+					tails : user_data.results_count.tails + 1
 				}
+			}
 
-				handlerInput.attributesManager.setPersistentAttributes( results_count );
-				return handlerInput.responseBuilder
-					.speak(speechText)
-					.withSimpleCard("The Results are in!", speechText)
-					.getResponse();
+			speechText = TOSS_RESULT_TAILS;
+			console.log("User Data Tail", user_data);
+		}
+		console.log("User Data", user_data);
 
-			})
-			.catch( (e) => {
-				console.error(e);
-				return handlerInput.responseBuilder
-					.speak(speechText)
-					.withSimpleCard("The Results are in!", speechText)
-					.getResponse();
-			});
-
+		handlerInput.attributesManager.setSessionAttributes( user_data );
+		await handlerInput.attributesManager.setPersistentAttributes(user_data);
+		
+		return handlerInput.responseBuilder
+			.speak(speechText)
+			.withSimpleCard("The Results are in!", speechText)
+			.getResponse();
 	}
 };
 
@@ -85,21 +145,22 @@ const HelpIntentHandler = {
 	}
 };
 
-
-
 const CancelAndStopIntentHandler = {
 	canHandle( handlerInput ){
 		return handlerInput.requestEnvelope.request.type === 'IntentRequest'
 			&& (handlerInput.requestEnvelope.request.intent.name === 'AMAZON.CancelIntent'
 				|| handlerInput.requestEnvelop.request.intent.name === 'AMAZON.StopIntent');
 	},
-	handle(handlerInput) {
+	async handle(handlerInput) {
 		const speechText = "Aww, let's flip some more coins. Sad Face"
-
+		//adding session data in to persistent Data at the end of the session.
+		let user_data = handlerInput.attributesManager.getSessionAttributes()
+		await handlerInput.attributesManager.setPersistentAttributes( user_data)
 		return handlerInput.responseBuilder
 			.speak( speechText )
 			.withSimpleCard("Fun Time is over?", speechText)
 			.getResponse();
+
 	}
 }
 
@@ -109,8 +170,8 @@ const SessionEndedRequestHandler = {
 		return handlerInput.requestEnvelope.request.type === 'SessionEndedRequest';
 	},
 	handle(handlerInput) {
-		//TODO: Remember to cleanup before you leave!
 		return handlerInput.responseBuilder.getResponse();
+
 	}
 };
 
@@ -123,7 +184,7 @@ const ErrorHandler = {
 
 		return handlerInput.responseBuilder
 			.speak('Wait... did you just ask me to flip a coin?')
-			.reprompt('I think I misheard, did you REALLY want to toss another coin?')
+			.reprompt('Sorry, couldn\'t hear you amidst all these falling coins.')
 			.getResponse();
 	},
 };
@@ -135,10 +196,13 @@ const ErrorHandler = {
  */
 
 exports.handler = Alexa.SkillBuilders.standard()
-	.addRequestHandlers(LaunchRequestHandler,
+	.addRequestHandlers(
+		LogIntentTypeHandler,
+		LaunchRequestHandler,
 		TossCoinIntentHandler,
 		HelpIntentHandler,
 		CancelAndStopIntentHandler,
+		NewSessionHandler,
 		SessionEndedRequestHandler)
 	.addErrorHandlers(ErrorHandler)
 	.withTableName('count-coin-toss')

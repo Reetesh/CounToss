@@ -16,5 +16,8 @@
     "lambda"
   ],
   "author": "Reetesh Yelamanchili",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "ask-sdk": "^2.0.7"
+  }
 }

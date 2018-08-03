@@ -1,0 +1,20 @@
+{
+  "name": "count-coin-toss",
+  "version": "1.0.0",
+  "description": "A simple Alexa Skill to toss a coin and keep track of the toss results",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "alexa",
+    "skill",
+    "coin",
+    "toss",
+    "count",
+    "dyanmoDB",
+    "lambda"
+  ],
+  "author": "Reetesh Yelamanchili",
+  "license": "ISC"
+}

@@ -100,7 +100,6 @@ const TossCoinIntentHandler = {
 				}
 			}
 			speechText = TOSS_RESULT_HEADS;
-			console.log("User Data Head", user_data);
 		}
 		else {
 
@@ -113,11 +112,11 @@ const TossCoinIntentHandler = {
 			}
 
 			speechText = TOSS_RESULT_TAILS;
-			console.log("User Data Tail", user_data);
 		}
-		console.log("User Data", user_data);
 
 		handlerInput.attributesManager.setSessionAttributes( user_data );
+
+		//TODO: Figure out LifeCycle Management and how a regular session ends
 		await handlerInput.attributesManager.setPersistentAttributes(user_data);
 		await handlerInput.attributesManager.savePersistentAttributes();
 		
@@ -137,8 +136,10 @@ const CountResultsIntentHandler = {
 		let speechText = "1..2..3, having trouble counting, sorry";
 		let user_data = await loadUserData( handlerInput);
 		let requested_stat = handlerInput.requestEnvelope.request.intent.slots.result.value;
+		/*
 		console.log( "Requested Stat", requested_stat);
 		console.log("Request Result", handlerInput.requestEnvelope.request.intent.slots.result);
+		*/
 		if( requested_stat != undefined && requested_stat.toLowerCase() === "tails" ){
 			speechText = "You have had " + user_data.results_count.tails +" tails so far!";
 		}
@@ -195,7 +196,9 @@ const SessionEndedRequestHandler = {
 	canHandle(handlerInput) {
 		return handlerInput.requestEnvelope.request.type === 'SessionEndedRequest';
 	},
-	handle(handlerInput) {
+	async handle(handlerInput) {
+
+		await handlerInput.attributesManager.savePersistentAttributes();
 		return handlerInput.responseBuilder.getResponse();
 
 	}
@@ -209,8 +212,8 @@ const ErrorHandler = {
 		console.log(`Error handled: ${error.message}`);
 
 		return handlerInput.responseBuilder
-			.speak('Wait... did you just ask me to flip a coin?')
-			.reprompt('Sorry, couldn\'t hear you amidst all these falling coins.')
+			.reprompt('Wait... did you just ask me to flip a coin?')
+			.speak('Sorry, couldn\'t hear you amidst all these falling coins.')
 			.getResponse();
 	},
 };

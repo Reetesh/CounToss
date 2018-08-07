@@ -2,9 +2,7 @@
 
 const Alexa = require('ask-sdk');
 
-const TOSS_RESULT_HEADS = "It\'s Heads!";
-const TOSS_RESULT_TAILS = "It\'s Tails!";
-
+const STRINGS =  require('strings.js').STRINGS;
 
 
 function loadUserData(handlerInput) {
@@ -33,6 +31,10 @@ function loadUserData(handlerInput) {
 	})
 }
 
+
+/* Simple Function to log the Intent Type that is received by the skill
+ * Put this is in here to understand the event flow and check if it is working as expected"
+ */
 const LogIntentTypeHandler = {
 	canHandle(handlerInput){
 		console.log("Logging the Request");
@@ -67,14 +69,14 @@ const LaunchRequestHandler = {
 	handle( handlerInput) {
 
 		console.log("New Launch Request received");
-		const welcomeText = "Wanna Toss some COINS?! Just ask!";
-		const repromptText = "You can ask me to flip a coin, try it out!";
+		const welcomeText = STRINGS.WELCOME_MESSAGE;
+		const repromptText = STRINGS.WELCOME_REPROMPT;
 
 		loadUserData(handlerInput);
 		return handlerInput.responseBuilder
 			.speak(welcomeText)
 			.reprompt(repromptText)
-			.withSimpleCard("Heads or Tails", welcomeText)
+			.withSimpleCard(STRINGS.WELCOME_SIMPLE_TITLE, welcomeText)
 			.getResponse();
 
 	}
@@ -87,10 +89,11 @@ const TossCoinIntentHandler = {
 			&& handlerInput.requestEnvelope.request.intent.name === "TossCoin";
 	},
 	async handle( handlerInput){
-		let speechText = "Oops, Looks like the coin landed in the water."
+		let speechText = STRINGS.TOSS_COIN_DEFAULT;
 		//Basically rolling a dice and if it is Even, calling the Toss a Heads, else calling it Tails.
 		let dice_roll = Math.floor((Math.random() * 100 + 1));
 		let user_data = await loadUserData( handlerInput );
+		//updating user_data with the new count for the result
 		if( dice_roll % 2 == 0 ){
 			user_data = {
 				...user_data,
@@ -99,7 +102,7 @@ const TossCoinIntentHandler = {
 					heads : user_data.results_count.heads + 1
 				}
 			}
-			speechText = TOSS_RESULT_HEADS;
+			speechText = STRINGS.TOSS_RESULT_HEADS[ dice_roll % STRINGS.TOSS_RESULT_HEADS.length ];
 		}
 		else {
 
@@ -111,18 +114,19 @@ const TossCoinIntentHandler = {
 				}
 			}
 
-			speechText = TOSS_RESULT_TAILS;
+			speechText = STRINGS.TOSS_RESULT_TAILS[ dice_roll % STRINGS.TOSS_RESULT_TAILS.length ];
 		}
 
 		handlerInput.attributesManager.setSessionAttributes( user_data );
 
-		//TODO: Figure out LifeCycle Management and how a regular session ends
 		await handlerInput.attributesManager.setPersistentAttributes(user_data);
 		await handlerInput.attributesManager.savePersistentAttributes();
 		
 		return handlerInput.responseBuilder
 			.speak(speechText)
-			.withSimpleCard("The Results are in!", speechText)
+			.withSimpleCard( STRINGS.TOSS_COIN_SIMPLE_TITLE, speechText)
+			.reprompt( STRINGS.TOSS_COIN_REPROMPT )
+			.withShouldEndSession(false)
 			.getResponse();
 	}
 };
@@ -133,22 +137,27 @@ const CountResultsIntentHandler = {
 			&& handlerInput.requestEnvelope.request.intent.name === "CountResults";
 	},
 	async handle( handlerInput ) {
-		let speechText = "1..2..3, having trouble counting, sorry";
+		let speechText = STRINGS.COUNT_RESULTS_DEFAULT;
 		let user_data = await loadUserData( handlerInput);
 		let requested_stat = handlerInput.requestEnvelope.request.intent.slots.result.value;
 		/*
 		console.log( "Requested Stat", requested_stat);
 		console.log("Request Result", handlerInput.requestEnvelope.request.intent.slots.result);
 		*/
+		//TODO: Match the resolution value instead of the actual value to respond better
 		if( requested_stat != undefined && requested_stat.toLowerCase() === "tails" ){
-			speechText = "You have had " + user_data.results_count.tails +" tails so far!";
+			speechText = "You have landed " + user_data.results_count.tails +" tails so far!";
 		}
-		else {
-			speechText = "You have had " + user_data.results_count.heads + " heads so far!";
+		else if(( requested_stat != undefined) && requested_stat.toLowerCase() == "heads") {
+			speechText = "You have landed " + user_data.results_count.heads + " heads so far!";
+		}
+		else if( (requested_stat != undefined) && (requested_stat.toLowerCase() == "all" ) ){
+			speechText = "You have landed " + user_data.results_count.heads + " Heads and "
+				+ user_data.results_count.tails + " Tails so far."
 		}
 		return handlerInput.responseBuilder
 			.speak(speechText)
-			.withSimpleCard("Your Stats", speechText)
+			.withSimpleCard( STRINGS.COUNT_RESULTS_SIMPLE_TITLE, speechText)
 			.getResponse();
 	}
 
@@ -161,17 +170,21 @@ const HelpIntentHandler = {
 			&& handlerInput.requestEnvelope.request.intent.name === 'AMAZON.HelpIntent';
 	},
 	handle( handlerInput) {
-		const welcomeText = "Wanna Toss some COINS?! Just ask!";
-		const repromptText = "You can ask me to flip a coin, try it out!";
+		const welcomeText = STRINGS.WELCOME_SPEECH;
+		const repromptText = STRINGS.WELCOME_REPROMPT;
 
 		return handlerInput.responseBuilder
 			.speak(welcomeText)
 			.reprompt(repromptText)
-			.withSimpleCard("Heads or Tails?", welcomeText)
+			.withSimpleCard(STRINGS.WELCOME_SIMPLE_TEXT, welcomeText)
+			.withShouldEndSession(false)
 			.getResponse();
 	}
 };
 
+/*
+ * When a Cancel or Stop intent is received, making sure to save the session attributes to persistent store.
+ */
 const CancelAndStopIntentHandler = {
 	canHandle( handlerInput ){
 		return handlerInput.requestEnvelope.request.type === 'IntentRequest'
@@ -179,26 +192,31 @@ const CancelAndStopIntentHandler = {
 				|| handlerInput.requestEnvelop.request.intent.name === 'AMAZON.StopIntent');
 	},
 	async handle(handlerInput) {
-		const speechText = "Aww, let's flip some more coins. Sad Face"
+		const speechText = STRINGS.EXIT_SPEECH;
 		//adding session data in to persistent Data at the end of the session.
 		let user_data = handlerInput.attributesManager.getSessionAttributes()
-		await handlerInput.attributesManager.savePersistentAttributes( user_data)
+		await handlerInput.attributesManager.setPersistentAttributes(user_data);
+		await handlerInput.attributesManager.savePersistentAttributes()
 		return handlerInput.responseBuilder
 			.speak( speechText )
-			.withSimpleCard("Fun Time is over?", speechText)
+			.withSimpleCard(STRINGS.EXIT_SIMPLE_TITLE, speechText)
 			.getResponse();
 
 	}
 }
 
-
+/* 
+ * At the end of session, persisting the sessionAttribute to persistent store
+ */
 const SessionEndedRequestHandler = {
 	canHandle(handlerInput) {
 		return handlerInput.requestEnvelope.request.type === 'SessionEndedRequest';
 	},
 	async handle(handlerInput) {
-
-		await handlerInput.attributesManager.savePersistentAttributes();
+		
+		let user_data = handlerInput.attributesManager.getSessionAttributes()
+		await handlerInput.attributesManager.setPersistentAttributes(user_data);
+		await handlerInput.attributesManager.savePersistentAttributes()
 		return handlerInput.responseBuilder.getResponse();
 
 	}
@@ -212,8 +230,9 @@ const ErrorHandler = {
 		console.log(`Error handled: ${error.message}`);
 
 		return handlerInput.responseBuilder
-			.reprompt('Wait... did you just ask me to flip a coin?')
-			.speak('Sorry, couldn\'t hear you amidst all these falling coins.')
+			.speak(STRINGS.ERROR_SPEECH)
+			.reprompt(STRINGS.ERROR_REPROMPT)
+			.withShouldEndSession(false)
 			.getResponse();
 	},
 };
